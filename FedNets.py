@@ -3,12 +3,29 @@
 # Python version: 3.6
 
 import torch
-from torch import nn
+import torch.nn as nn
 import torch.nn.functional as F
 
-torch.manual_seed(1)
-torch.cuda.manual_seed_all(1)
-torch.cuda.manual_seed(1)
+class MlPModel(nn.Module):
+    def __init__(self, input_dim=89, hidden_units=[128], num_classes=2):
+        super(MlPModel, self).__init__()
+        
+        self.input_layer = nn.Linear(input_dim, hidden_units[0])
+        hidden_layers = []
+        for i in range(1,len(hidden_units)):
+            hidden_layers.append(nn.Linear(hidden_units[i-1], hidden_units[i]))
+            hidden_layers.append(torch.relu())
+        self.hidden_layers = nn.Sequential(*hidden_layers)
+        self.output_layer = nn.Linear(hidden_units[-1], num_classes)
+
+    def forward(self, x):
+
+        x = self.input_layer(x)
+        x = self.hidden_layers(x)
+        x = self.output_layer(x)
+        x = torch.softmax(x)
+
+        return x
 
 class MLP(nn.Module):
     def __init__(self, dim_in, dim_hidden, dim_out):
@@ -28,9 +45,9 @@ class MLP(nn.Module):
         x = self.layer_hidden(x)
         return self.softmax(x)
 
-class MLP1(nn.Module):
+class MLPMnist(nn.Module):
     def __init__(self, dim_in, dim_hidden, dim_out):
-        super(MLP1, self).__init__()
+        super(MLPMnist, self).__init__()
         print("NN: MLP is created")
         self.layer_input = nn.Linear(dim_in, dim_hidden)
         self.layer_hidden = nn.Linear(dim_hidden, dim_out)
@@ -296,9 +313,9 @@ class VGG(nn.Module):
 
 # adult_net 
 
-class MLP3(nn.Module):
+class MLPAdult(nn.Module):
     def __init__(self,args):
-        super(MLP3, self).__init__()
+        super(MLPAdult, self).__init__()
         print("NN:  adult_net MLP  is created")
         #self.l1 = nn.Linear(10,64)
         #self.l2 = nn.Linear(64,32)

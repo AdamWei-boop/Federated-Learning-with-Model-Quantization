@@ -10,6 +10,18 @@ import copy
 import random
 import math
 
+def add(params_a, params_b):
+    w = copy.deepcopy(params_a)
+    for k in w.keys():
+            w[k] += params_b[k]
+    return w
+
+def subtract(params_a, params_b):
+    w = copy.deepcopy(params_a)
+    for k in w.keys():
+            w[k] = w[k] - params_b[k]
+    return w
+
 def dict_to_list(params_a):
     val_a = []
     for i in params_a.keys():

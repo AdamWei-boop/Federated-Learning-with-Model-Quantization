@@ -23,7 +23,6 @@ def mnist_iid(args,dataset, num_users, num_items):
     print('len(dataset) =',len(dataset))      
     dict_users, all_idxs = {}, [i for i in range(len(dataset))]     
     if len(dataset) == 60000:
-        num_group = int(num_users/len(args.ratio_train))
         if args.strict_iid == True:
             labels = dataset.train_labels.numpy()
             classes = np.unique(labels)
@@ -31,7 +30,7 @@ def mnist_iid(args,dataset, num_users, num_items):
             for i in range(len(classes)):
                 classes_index.append(unique_index(labels, classes[i]))
             for i in range(num_users):
-                num_items_i= int(args.ratio_train[int(i/num_group)]*num_items)
+                num_items_i= num_items
                 num_digits = int(num_items_i/10)
                 c = []
                 for j in range(10):
@@ -44,7 +43,7 @@ def mnist_iid(args,dataset, num_users, num_items):
         else:
             dict_users, all_idxs = {}, [i for i in range(len(dataset))]
             for i in range(num_users):
-                num_items_i= int(args.ratio_train[int(i/num_group)]*num_items)
+                num_items_i= num_items
                 dict_users[i] = set(np.random.choice(all_idxs, num_items_i, replace=False))
                 if num_users*num_items_i <= len(dataset):
                     all_idxs = list(set(all_idxs) - dict_users[i])

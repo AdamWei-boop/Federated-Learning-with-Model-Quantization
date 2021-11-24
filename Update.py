@@ -25,9 +25,8 @@ class DatasetSplit(Dataset):
 
 
 class LocalUpdate(object):
-    def __init__(self, args, dataset, idxs, tb):
+    def __init__(self, args, dataset, idxs):
         self.args = args
-        self.tb = tb
         self.loss_func = nn.CrossEntropyLoss()
         # self.loss_func = nn.NLLLoss()
         self.ldr_train, self.ldr_test = self.train_val_test(dataset, list(idxs))          
@@ -50,7 +49,7 @@ class LocalUpdate(object):
         # train and update
         #optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=0.5)
         optimizer = torch.optim.SGD(net.parameters(), lr=self.args.lr, momentum=0.9)
-        #optimizer = optim.Adam([var1, var2], lr = 0.0001)  #还不确定对不对
+        #optimizer = optim.Adam([var1, var2], lr = 0.0001)
         #optimizer = torch.optim.Adam(net.parameters(), lr=self.args.lr)  # Adam 优化器
         epoch_loss = []
         epoch_acc = []
@@ -72,7 +71,6 @@ class LocalUpdate(object):
                 #    print('Update Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 #        iter, batch_idx * len(images), len(self.ldr_train.dataset),
                 #               100. * batch_idx / len(self.ldr_train), loss.data.item()))
-                self.tb.add_scalar('loss', loss.data.item())
                 batch_loss.append(loss.data.item())
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
             acc, _, = self.test(net)
@@ -81,12 +79,10 @@ class LocalUpdate(object):
             #    print("local epoch:", iter)
             #    print("acc: {}".format(acc))
             epoch_acc.append(acc)
-            if iter == 0:
-                w_1st_ep = copy.deepcopy(net.state_dict())
         avg_loss = sum(epoch_loss)/len(epoch_loss)
         avg_acc = sum(epoch_acc)/len(epoch_acc)
         w = net.state_dict()         
-        return w_1st_ep, w, avg_loss ,avg_acc
+        return w, avg_loss ,avg_acc
           
 
     def test(self, net):

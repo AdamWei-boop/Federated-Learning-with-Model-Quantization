@@ -8,85 +8,19 @@ Created on Sun Nov 21 19:31:22 2021
 import numpy as np
 import copy
 import pandas as pd
+import torch
+import math
+
+from numpy import linalg 
 from sklearn.cluster import KMeans
+from csvec import CSVec
+from calculate import get_2_norm
 
-def quantile_uniform(quantile_level,value_sequence_,sorted_id_):
-    quantile_buck = np.zeros(quantile_level+1)
-    quantile_index = np.zeros(len(value_sequence_))
-    values_increment = np.zeros(len(value_sequence_))
-    sorted_id =copy.deepcopy(sorted_id_)
-    max_value = max(value_sequence_)+0.000001
-    min_value = min(value_sequence_)-0.000001
-    delta = (max_value-min_value)/quantile_level
-    for i in range(quantile_level+1):
-        quantile_buck[i] = min_value + delta*i
-
-    a0= min_value
-    a1= min_value + delta
-    code = 0
-    #print('\n value_sequence_ =',value_sequence_)
-    for i in range(len(value_sequence_)):
-            X =1
-            while X :
-                if value_sequence_[i] >= a0 and value_sequence_[i] < a1 :
-                    quantile_index[sorted_id[i]] = code  # 二进制编码
-                    values_increment[sorted_id[i]] = (a0+a1)/2
-                    #print('\n a0= ',a0,'a1=',a1,'   value_sequence_[i] = ',value_sequence_[i])
-                    X =0
-                else:
-                    a0= a1
-                    a1= a1 + delta
-                    code = code +1
-                    X = 1            
-    return quantile_buck,quantile_index,values_increment
-
-def quantile_bucket(quantile_level,value_sequence, sorted_id):
-    quantile_buck = []
-    quantile_index = copy.deepcopy(sorted_id)
-    values_increment = copy.deepcopy(value_sequence)
-    k, k_ = 0, 0
-    for i in range(len(value_sequence)):
-        if i == 0:
-            quantile_buck.append(value_sequence[i]-0.00000001)
-        elif (i+1)%quantile_level == 0:
-            if i == len(value_sequence)-1:
-                quantile_buck.append(value_sequence[i]+0.0000001)
-            else :
-                quantile_buck.append(value_sequence[i])
-            #----------------- test add ---------------
-            #print('\n i = ',i,'quantile_level =',quantile_level)
-            c0 = value_sequence[i+1-quantile_level:i].copy()
-            #code_value = loss_min(c0)
-            code_value = (c0[0]+c0[-1])/2
-            #print('\n code value: ',code_value)
-            #------------------test ------------------------------
-            for j in range(k_,i+1):
-                quantile_index[sorted_id[j]] = k
-                #values_increment[sorted_id[j]] = (quantile_buck[-1]+quantile_buck[-2])/2
-                values_increment[sorted_id[j]] = code_value
-            k += 1
-            k_ = i
-        elif len(value_sequence)%quantile_level != 0 and i == len(value_sequence)-1:
-            quantile_buck.append(value_sequence[i] +0.0000001)
-            #------------------- test add  -------------------------
-            c1 = value_sequence[-(len(value_sequence)%quantile_level):].copy()
-            code_value = (c1[0]+c1[-1])/2
-            #print('\n code value: ',code_value)
-            #code_value = loss_min(c1)
-            #--------------------test add ---------------------- 
-            for j in range(k_,i+1):
-                quantile_index[sorted_id[j]] = k
-                #values_increment[sorted_id[j]] = (quantile_buck[-1]+quantile_buck[-2])/2
-                values_increment[sorted_id[j]] = code_value 
-            k += 1
-            k_ = i  
-                
-    return quantile_buck, quantile_index, values_increment
 
 def kmeans_opt(quantile_level,orig_values_increment):
     quantile_buck = np.zeros(quantile_level+1)
-    quantile_buck[-1] = max(orig_values_increment)+0.000001
-    quantile_buck[0] = min(orig_values_increment)-0.000001
+    quantile_buck[-1] = max(orig_values_increment)+(1e-5)
+    quantile_buck[0] = min(orig_values_increment)-(1e-5)
     kmeans = KMeans(n_clusters = quantile_level)
     x=np.array(orig_values_increment).reshape(-1,1).astype(np.float64)
     kmeans.fit(x) 
@@ -98,28 +32,20 @@ def kmeans_opt(quantile_level,orig_values_increment):
     quantile_index = pd.cut(orig_values_increment, quantile_buck, right=True, labels=range(len(quantile_buck)-1))
     values_increment = [quantile_value[i] for i in quantile_index]
     
-    #---------debug-----------
-    #print('final kmeans_err = ', np.linalg.norm(np.array(values_increment)-np.array(orig_values_increment), ord=1)) 
-    #---------debug------------
     return quantile_buck,quantile_index,values_increment
 
 
-def QSGD_(quantile_level,orig_values_increment):
+def QSGD(quantile_level,orig_values_increment):
     
-    norm = np.linalg.norm(orig_values_increment, ord=2, axis=None, keepdims=False) #二范数
+    norm = np.linalg.norm(orig_values_increment, ord=2, axis=None, keepdims=False)
     interval = 2*norm/quantile_level
     quantile_buck = [-norm+i*interval for i in range(int(quantile_level/2))] + [i*interval for i in range(int(quantile_level/2)+1)]
     quantile_index = pd.cut(orig_values_increment, quantile_buck, right=True, labels=range(quantile_level))
 
-    #print('quantile_index, quantile_buck, norm =',quantile_index)
-    #print('quantile_buck',quantile_buck)
-    #print('norm=',norm)
     quantile_index_l = [abs(int(i-quantile_level/2+0.5)) for i in quantile_index]
     dec_value = [quantile_index_l[i]+1-0.5*quantile_level*abs(orig_values_increment[i])/norm for i in range(len(orig_values_increment))]
     random_value = np.random.rand(len(orig_values_increment))
     
-    #print("\n ***********\n       dec_value =",dec_value)
-    #print('random_value =',random_value) #quantile_index_l, quantile_index)
     
     values_increment = copy.deepcopy(orig_values_increment)    
     for i in range(len(orig_values_increment)):
@@ -129,3 +55,149 @@ def QSGD_(quantile_level,orig_values_increment):
             values_increment[i] = quantile_buck[quantile_index[i]+1]
     
     return quantile_buck,quantile_index,values_increment
+
+def SVD_Split(quantile_level,orig_values_increment):
+    #-------input arr handle  -----------------------
+    length=len(orig_values_increment)
+    #print('length =',length)
+    #print('sqrt = ',np.ceil(math.sqrt(length)))
+    matrix_size = int(np.ceil(math.sqrt(length)))
+    orig_arr = np.zeros(matrix_size*matrix_size)
+    for i in range(len(orig_values_increment)):
+        orig_arr[i] =orig_values_increment[i]
+    orig_matrix =orig_arr.reshape(matrix_size,matrix_size)
+    #-----------svd split ---------
+    u,sigma,vt = linalg.svd(orig_matrix)
+    #print(orig_values_increment)
+    S = np.zeros([len(sigma),len(sigma)])
+    R = int(np.ceil(len(orig_values_increment)*math.log2(quantile_level)/(32*(2*matrix_size+1))))
+    #R = 4
+    #print('math.log2(quantile_level)= ',math.log2(quantile_level))
+    # print( 'R = ',R)
+    u1 =u[:,:R]
+    vt1 =vt[:R,:]
+    #print('\n -------------sigma= ',sigma[:R])
+    #print('\n -------------sigma= ',sigma[-R:])
+    S1 = np.zeros([R,R])
+    for i in range(R):
+        S1[i][i] =sigma[i]
+    tmp = np.dot(u1,S1)
+    values_increment_ =np.dot(tmp,vt1).reshape(1,matrix_size*matrix_size)
+    values_increment = []
+    for i in range(length):
+        values_increment.append(values_increment_[0,i])
+    #print('\n---------\n',values_increment)
+
+    quantile_err = sum(abs(np.array(values_increment)-np.array(orig_values_increment)))
+    #print('\n err = ',quantile_err)
+    transmist_bit = (2*R*len(sigma)+R)*32
+    # print('transmit_bit = ',transmist_bit,'bit')
+    return values_increment
+
+
+def count_sketch(grad, table_size):
+    device = 'cpu'
+
+    # compress the gradient if needed
+    sketch = CSVec(d=len(grad), c=table_size[1],
+        r=table_size[0], device=device,
+        numBlocks=table_size[2])
+    sketch.accumulateVec(grad)
+    # gradient clipping
+
+    hash_table = sketch.table
+    unSketch_grad = sketch.unSketch(k=len(grad))
+    #print('grad = ',update.size())
+    #print('grad = ',grad.size())
+    #print('g = ',g)
+    #print(unSketch_grad)
+    return hash_table, unSketch_grad, grad
+
+
+def quant_recover_boundary(w, bucket_boundary):
+
+    quant_update = copy.deepcopy(w)
+    for i in w.keys():
+        for j in range(len(bucket_boundary)-1):
+            locations_bucket = (quant_update[i] > bucket_boundary[j]) & (quant_update[i] <= bucket_boundary[j+1])
+            quant_update[i][locations_bucket] = (bucket_boundary[j] + bucket_boundary[j+1])/2
+    
+    return quant_update
+
+def quant_recover_values(w, quant_values):
+    quant_w = copy.deepcopy(w)
+    m =0
+    for i in w.keys():
+        for index, element in np.ndenumerate(w[i].cpu().numpy()):
+            quant_w[i][index] = torch.tensor(quant_values[m])
+            m =m +1
+            
+    return quant_w
+
+class quant_process(object):
+    def __init__(self, sketch_sche, w_update, quant_level):
+        
+        self.sketch_sche = sketch_sche
+        self.quant_level = quant_level
+        self.w_update = w_update
+    
+        self.values_update = []                          
+        for i in w_update.keys():
+            self.values_update += list(w_update[i].view(-1).cpu().numpy())
+    
+    def quant(self):
+        
+        if self.sketch_sche == 'orig':
+            
+            quant_w = self.w_update
+            mse_error = 0
+            
+        elif self.sketch_sche == 'bucket_quantile':
+            
+            q = [i/self.quant_level for i in range(self.quant_level)]
+            quantile_bucket = np.quantile(self.values_update, q, axis = None)
+            
+            
+            min_value, max_value = min(self.values_update)-(1e-5), max(self.values_update)+(1e-5)
+            quantile_bucket = [min_value] + quantile_bucket + [max_value]
+ 
+            quant_w = quant_recover_boundary(self.w_update, quantile_bucket)
+        
+        elif self.sketch_sche == 'uniform_quantization':
+            
+            min_value, max_value = min(self.values_update)-(1e-5), max(self.values_update)+(1e-5)
+            _, uniform_bucket = np.histogram(self.values_update,
+                                                bins=self.quant_level,
+                                                range=[min_value, max_value],
+                                                weights=None,
+                                                density=False)
+            quant_w = quant_recover_boundary(self.w_update, uniform_bucket)
+        
+        elif self.sketch_sche == 'kmeans':
+        
+            _, _, quant_values = kmeans_opt(self.quant_level, self.values_update)
+            quant_w = quant_recover_values(self.w_update, quant_values)
+
+        elif self.sketch_sche == 'QSGD':
+
+            _, _, quant_values = QSGD(self.quant_level, self.values_update)
+            quant_w = quant_recover_values(self.w_update, quant_values)
+            
+        elif self.sketch_sche == 'count_sketch':
+
+            grad = torch.from_numpy(np.array(self.values_update))
+            table_size = [128, 200, 1]
+            #g =sketch_new(w_increas,orig_values_increment,num_rows,num_cols, compute_grad=True)
+            # grad_size =  len(self.values_update)
+            hash_table, grad_unsketched, grad = count_sketch(grad, table_size)
+            quant_values = grad_unsketched.numpy()
+            quant_w = quant_recover_values(self.w_update, quant_values)
+            
+        elif self.sketch_sche == 'SVD_Split':
+            
+            quant_values = SVD_Split(self.quant_level, self.values_update)
+            quant_w = quant_recover_values(self.w_update, quant_values)
+            
+        mse_error = get_2_norm(quant_w, self.w_update)
+        
+        return quant_w, mse_error
