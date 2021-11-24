@@ -132,7 +132,7 @@ class CNNFashionMnist(nn.Module):
     def __init__(self,args):
         super(CNNFashionMnist, self).__init__()
         print("NN: CNNFashionMnist is created")
-        self.conv1 = nn.Conv2d(1, 20, 5, 1)  # 1表示输入通道，20表示输出通道，5表示conv核大小，1表示conv步长
+        self.conv1 = nn.Conv2d(1, 20, 5, 1) 
         self.conv2 = nn.Conv2d(20, 50, 5, 1)
         #self.fc1 = nn.Linear(4 * 4 * 50, 500)
         #self.fc2 = nn.Linear(500, args.num_classes)
@@ -148,8 +148,6 @@ class CNNFashionMnist(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
-
-
 
 class VGG(nn.Module):
     cfg = {
