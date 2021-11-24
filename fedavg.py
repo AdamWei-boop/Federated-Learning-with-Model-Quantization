@@ -27,7 +27,6 @@ def main(args):
 
     # load dataset and split users
     dict_users_train, dict_users_test = {},{}
-    dataset_train,dataset_test = [],[]
     if args.dataset == 'mnist':
         dataset_train = datasets.MNIST('./datasets/mnist/', train=True, download=True,
                    transform=transforms.Compose([
@@ -81,7 +80,6 @@ def main(args):
     elif args.dataset == 'adult':  #
         data_set = pd.read_csv("./datasets/Bin_Adultall.csv")
         columns = list(data_set.columns)
-        print(columns)
         X = data_set.drop([columns[-1]], axis=1).values.astype(float)
         y = data_set[columns[-1]].values.astype(int)
 
