@@ -125,14 +125,14 @@ def quant_recover_boundary(w, bucket_boundary):
     return quant_update
 
 def quant_recover_values(w, quant_values):
-    quant_w = copy.deepcopy(w)
-    m =0
+    quant_update = copy.deepcopy(w)
+    m = 0
     for i in w.keys():
         for index, element in np.ndenumerate(w[i].cpu().numpy()):
-            quant_w[i][index] = torch.tensor(quant_values[m])
-            m =m +1
+            quant_update[i][index] = torch.tensor(quant_values[m])
+            m = m + 1
             
-    return quant_w
+    return quant_update
 
 class quant_process(object):
     def __init__(self, sketch_sche, w_update, quant_level):
