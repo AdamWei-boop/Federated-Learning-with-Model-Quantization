@@ -311,5 +311,5 @@ if __name__ == '__main__':
     
     print('\nExperiment finished')
     run_end_time = time.time()
-    print('\nRun time = {} h'.format((run_end_time-run_start_time)/3600))
+    print('\nRun time = {}h'.format((run_end_time-run_start_time)/3600))
     
