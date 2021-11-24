@@ -14,85 +14,21 @@ class MlPModel(nn.Module):
         hidden_layers = []
         for i in range(1,len(hidden_units)):
             hidden_layers.append(nn.Linear(hidden_units[i-1], hidden_units[i]))
-            hidden_layers.append(torch.relu())
+            hidden_layers.append(nn.ReLU())
         self.hidden_layers = nn.Sequential(*hidden_layers)
         self.output_layer = nn.Linear(hidden_units[-1], num_classes)
-
-    def forward(self, x):
-
-        x = self.input_layer(x)
-        x = self.hidden_layers(x)
-        x = self.output_layer(x)
-        x = torch.softmax(x)
-
-        return x
-
-class MLP(nn.Module):
-    def __init__(self, dim_in, dim_hidden, dim_out):
-        super(MLP, self).__init__()
-        print("NN: MLP is created")
-        self.layer_input = nn.Linear(dim_in, dim_hidden)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout()
-        self.layer_hidden = nn.Linear(dim_hidden, dim_out)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
-        x = x.view(-1, x.shape[1]*x.shape[-2]*x.shape[-1])
-        x = self.layer_input(x)
-        x = self.dropout(x)
-        x = self.relu(x)
-        x = self.layer_hidden(x)
+        if len(x.shape) == 4:
+            x = x.view(-1, x.shape[1]*x.shape[-2]*x.shape[-1])
+        elif len(x.shape) == 3:
+            x = x.view(-1, x.shape[-2]*x.shape[-1])
+        x = self.input_layer(x)
+        x = self.hidden_layers(x)
+        x = self.output_layer(x)
+
         return self.softmax(x)
-
-class MLPMnist(nn.Module):
-    def __init__(self, dim_in, dim_hidden, dim_out):
-        super(MLPMnist, self).__init__()
-        print("NN: MLP is created")
-        self.layer_input = nn.Linear(dim_in, dim_hidden)
-        self.layer_hidden = nn.Linear(dim_hidden, dim_out)
-        # self.softmax = nn.Softmax(dim=1)
-
-        # weights_init = 0.001
-        # bias_init = 0.001
-        #
-        # nn.init.constant_(self.layer_input.weight,weights_init)
-        # nn.init.constant_(self.layer_input.bias, bias_init)
-        # nn.init.constant_(self.layer_hidden.weight, weights_init)
-        # nn.init.constant_(self.layer_hidden.bias, bias_init)
-
-    def forward(self, x):
-        x = x.view(-1, x.shape[1]*x.shape[-2]*x.shape[-1])
-        # x = x.view(-1, 1)
-        x = self.layer_input(x)
-        x = self.layer_hidden(x)
-        return F.log_softmax(x, dim=1)
-
-class MLP_triple(nn.Module):
-    def __init__(self, dim_in, dim_hidden1, dim_hidden2,dim_out):
-        super(MLP_triple, self).__init__()
-        print("NN: MLP is created")
-        self.layer_input = nn.Linear(dim_in, dim_hidden1)
-        self.layer_hidden = nn.Linear(dim_hidden1, dim_hidden2)
-        #self.layer_hidden = nn.Linear(dim_hidden2, dim_hidden3)
-        self.layer_out = nn.Linear(dim_hidden2, dim_out)
-        # self.softmax = nn.Softmax(dim=1)
-
-        # weights_init = 0.001
-        # bias_init = 0.001
-        #
-        # nn.init.constant_(self.layer_input.weight,weights_init)
-        # nn.init.constant_(self.layer_input.bias, bias_init)
-        # nn.init.constant_(self.layer_hidden.weight, weights_init)
-        # nn.init.constant_(self.layer_hidden.bias, bias_init)
-
-    def forward(self, x):
-        x = x.view(-1, x.shape[1]*x.shape[-2]*x.shape[-1])
-        # x = x.view(-1, 1)
-        x = self.layer_input(x)
-        x = self.layer_hidden(x)
-        x = self.layer_out(x)
-        return F.log_softmax(x, dim=1)
 
 class MLP_triple_SVD(nn.Module):
     def __init__(self, dim_in, dim_hidden1,dim12_sr,dim12_sc, dim_hidden2,dim_out):
@@ -121,19 +57,6 @@ class MLP_triple_SVD(nn.Module):
         x = self.layer_hidden2(x)
         x = self.layer_hidden3(x)
         x = self.layer_out(x)
-        return F.log_softmax(x, dim=1)
-
-class MLP_regression(nn.Module):
-    def __init__(self, dim_in, dim_hidden, dim_out):
-        super(MLP_regression, self).__init__()
-        print("NN: MLP is created")
-        self.layer_input = nn.Linear(dim_in, dim_hidden)
-        self.layer_hidden = nn.Linear(dim_hidden, dim_out)
-
-    def forward(self, x):
-        x = x.view(-1, x.shape[1]*x.shape[-2]*x.shape[-1])
-        x = self.layer_input(x)
-        x = self.layer_hidden(x)
         return F.log_softmax(x, dim=1)
 
 class CNN_test(nn.Module):
@@ -203,55 +126,6 @@ class CNNCifar(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return F.log_softmax(x, dim=1)
-"""
-
-class CNNCifar(nn.Module):
-    def __init__(self,args):
-        super(CNNCifar, self).__init__()
-        '''输入为3*32*32，尺寸减半是因为池化层'''
-        self.conv1 = nn.Conv2d(3, 16, 3, padding=1)   #输出为16*16*16
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)  #输出为32*8*8
-        self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(32 * 8 * 8, 512)
-        self.fc2 = nn.Linear(512, 10)
-        self.dropout = nn.Dropout(0.2)     #防止过拟合
-        
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        
-        x = x.view(-1, 32 * 8 * 8)
-        x = self.dropout(x)
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
-
-
-class CNNFashionMnist(nn.Module):
-    def __init__(self,args):
-        super(CNNFashionMnist, self).__init__()
-        print("NN: CNNFashionMnist is created")
-        self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=5, padding=2),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(2))
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=5, padding=2),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2))
-        self.fc = nn.Linear(7*7*32, args.num_classes)
-        
-    def forward(self, x):
-        out = self.layer1(x)
-        out = self.layer2(out)
-        out = out.view(out.size(0), -1)
-        out = self.fc(out)
-        return F.log_softmax(out, dim=1)
-"""
-
 
 
 class CNNFashionMnist(nn.Module):
@@ -309,58 +183,3 @@ class VGG(nn.Module):
         
         layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
         return nn.Sequential(*layers)
-
-
-# adult_net 
-
-class MLPAdult(nn.Module):
-    def __init__(self,args):
-        super(MLPAdult, self).__init__()
-        print("NN:  adult_net MLP  is created")
-        #self.l1 = nn.Linear(10,64)
-        #self.l2 = nn.Linear(64,32)
-        self.l1 = nn.Linear(44,64)
-        self.l2 = nn.Linear(64,32)
-        
-        self.l3 = nn.Linear(32,2)
-
-    def forward(self, x):
-        x = F.relu(self.l1(x))
-        x = F.relu(self.l2(x))
-        x = self.l3(x)
-        return x
-
-# 
-"""
-class MLP3(nn.Module):
-    def __init__(self,args):
-        super(MLP3, self).__init__()
-        print("NN: MLP is created")
-        self.l1 = nn.Linear(10,128)
-        self.l2 = nn.Linear(128,39)
-
-    def forward(self, x):
-        x = self.l1(x)
-        x = self.l2(x)
-        return x
-"""
-# adult_net 
-"""
-class MLP3(nn.Module):
-    def __init__(self,args):
-        super(MLP3, self).__init__()
-        print("NN:  adult_net MLP  is created")
-        self.l1 = nn.Linear(10,64)
-        self.l2 = nn.Linear(64,128)
-        self.l3 = nn.Linear(128,32)
-        self.l4 = nn.Linear(32,2)
-
-
-    def forward(self, x):
-        x = F.relu(self.l1(x))
-        x = F.relu(self.l2(x))
-        x = F.relu(self.l3(x))
-        x = self.l4(x)
-        return x
-
-"""

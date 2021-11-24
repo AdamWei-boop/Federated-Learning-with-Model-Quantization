@@ -10,10 +10,11 @@ import numpy as np
 import random
 import torch
 from torchvision import datasets, transforms
+from torch.utils.data import TensorDataset
 
 from sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_noniid
 from update import LocalUpdate
-from fednets import MlPModel, MLPMnist, CNNMnist, CNN_test, CNNCifar, MLPAdult,CNNFashionMnist
+from fednets import MlPModel, CNNMnist, CNN_test, CNNCifar, CNNFashionMnist
 from averaging import average_weights
 from calculate import subtract, add
 from quantilization_sche import quant_process
@@ -28,12 +29,12 @@ def main(args):
     dict_users_train, dict_users_test = {},{}
     dataset_train,dataset_test = [],[]
     if args.dataset == 'mnist':
-        dataset_train = datasets.MNIST('./dataset/mnist/', train=True, download=True,
+        dataset_train = datasets.MNIST('./datasets/mnist/', train=True, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.5,), (0.5,))
                    ]))
-        dataset_test = datasets.MNIST('./dataset/mnist/', train=False, download=True,
+        dataset_test = datasets.MNIST('./datasets/mnist/', train=False, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.5,), (0.5,))
@@ -49,8 +50,8 @@ def main(args):
         transform = transforms.Compose(
             [transforms.ToTensor(),
              transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-        dataset_train = datasets.CIFAR10('./dataset/cifar/', train=True, transform=transform, target_transform=None, download=True)
-        dataset_test = datasets.CIFAR10('./dataset/cifar/', train=False, transform=transform, target_transform=None, download=True)
+        dataset_train = datasets.CIFAR10('./datasets/cifar/', train=True, transform=transform, target_transform=None, download=True)
+        dataset_test = datasets.CIFAR10('./datasets/cifar/', train=False, transform=transform, target_transform=None, download=True)
         if args.iid:
             dict_users_train = cifar_iid(dataset_train, args.num_users, args.num_items_train)
             dict_users_test = cifar_iid(dataset_test, args.num_users, args.num_items_test)
@@ -59,13 +60,13 @@ def main(args):
             dict_users_test = cifar_noniid(args, dataset_test, args.num_users, args.num_items_test)
             
     elif args.dataset == 'FashionMNIST':
-        dataset_train = datasets.FashionMNIST('./dataset/fashion_mnist/', train=True, download=True,
+        dataset_train = datasets.FashionMNIST('./datasets/fashion_mnist/', train=True, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.5,), (0.5,))
                    ]))
         print('dataset_train = ',dataset_train)
-        dataset_test = datasets.FashionMNIST('./dataset/fashion_mnist/', train=False, download=True,
+        dataset_test = datasets.FashionMNIST('./datasets/fashion_mnist/', train=False, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.5,), (0.5,))
@@ -77,25 +78,19 @@ def main(args):
             dict_users_train = mnist_noniid(args, dataset_train, args.num_users, args.num_items_train)
             dict_users_test = mnist_noniid(args, dataset_test, args.num_users, args.num_items_test)
             
-    elif args.dataset == 'Adult':  #
-        dt = pd.read_csv("./datasets/Bin_Adultall.csv")
-        data_set = dt.values
-        # print(data_set)
-        X = data_set[:, :-1].astype(float)
-        Y = data_set[:, -1:].astype(int)
+    elif args.dataset == 'adult':  #
+        data_set = pd.read_csv("./datasets/Bin_Adultall.csv")
+        columns = list(data_set.columns)
+        print(columns)
+        X = data_set.drop([columns[-1]], axis=1).values.astype(float)
+        y = data_set[columns[-1]].values.astype(int)
 
-        X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.5, shuffle=True)
-        X_train, Y_train = torch.FloatTensor(X_train), torch.LongTensor(Y_train)
-        X_test, Y_test = torch.FloatTensor(X_test), torch.LongTensor(Y_test)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
+        X_train, y_train = torch.FloatTensor(X_train), torch.LongTensor(y_train)
+        X_test, y_test = torch.FloatTensor(X_test), torch.LongTensor(y_test)
 
-        Y_train = Y_train.reshape(len(Y_train),)
-        Y_test = Y_test.reshape(len(Y_test), )
-        dataset_train =[]
-        dataset_test =[]
-        for i in range(len(X_train)):
-            dataset_train.append([X_train[i], Y_train[i]])
-        for i in range(len(X_test)):
-            dataset_test.append([X_test[i], Y_test[i]])
+        dataset_train = TensorDataset(X_train, y_train)
+        dataset_test = TensorDataset(X_test, y_test)
         
         if args.iid:
             dict_users_train = mnist_iid(args, dataset_train, args.num_users, args.num_items_train)
@@ -104,14 +99,15 @@ def main(args):
             dict_users_train = mnist_noniid(args, dataset_train, args.num_users, args.num_items_train)
             dict_users_test = mnist_noniid(args, dataset_test, args.num_users, args.num_items_test)
 
-    img_size = dataset_train[0][0].shape    
+    img_size = dataset_train[0][0].shape
+      
     final_train_loss = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
     final_train_acc = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
     final_test_loss = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
     final_test_acc = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
     
-    num_combin = len(args.set_degree_noniid)*len(args.set_quant_level)*len(args.set_quant_sche)
-    for s in range(num_combin):
+    num_combination = len(args.set_degree_noniid)*len(args.set_quant_level)*len(args.set_quant_sche)
+    for s in range(num_combination):
         
         index0 = int(s / (len(args.set_quant_level) * len(args.set_quant_sche)))
         index1 = int((s-index0) / len(args.set_quant_sche))
@@ -129,9 +125,8 @@ def main(args):
             # with open('./Data_distribution/{}_dict_users_save_{}.pkl'.format(args.dataset,m),'rb') as f:
             #     dict_users = pickle.load(f)   
             # with open('./Data_distribution/{}_dict_server_save_{}.pkl'.format(args.dataset,m),'rb') as f:
-            #     dict_sever = pickle.load(f) 
-            # print('dict_users =',dict_users)
-            # print('dict_sever =',dict_sever)
+            #     dict_server = pickle.load(f) 
+            
             # build model
             net_glob = None
             
@@ -159,34 +154,13 @@ def main(args):
                 else:
                     net_glob = CNNMnist(args=args)
                     #torch.save(net_glob.state_dict(), './net_glob/cnn_mnist_glob.pth')
-            # elif args.model == 'mlp' and args.dataset == 'mnist':
-            #     len_in = 1
-            #     for x in img_size:
-            #         len_in *= x
-                    
-                    
-            #     if args.gpu != -1:
-            #         torch.cuda.set_device(args.gpu)
-            #         net_glob = MLPMnist(dim_in=len_in, dim_hidden=128, dim_out=args.num_classes).cuda()
-            #     else:
-            #         net_glob = MLPMnist(dim_in=len_in, dim_hidden=128, dim_out=args.num_classes)
-            #         #torch.save(net_glob.state_dict(), './net_glob/mlp_mnist_glob.pth')
             
             elif args.model == 'cnn' and args.dataset == 'cifar':
                 if args.gpu != -1:
                     net_glob = CNNCifar(args).cuda()
                 else:
                     net_glob = CNNCifar(args)
-            # elif args.model == 'mlp' and args.dataset == 'FashionMNIST':
-            #     len_in = 1
-            #     for x in img_size:
-            #         len_in *= x
-            #     if args.gpu != -1:
-            #         torch.cuda.set_device(args.gpu)
-            #         net_glob = MLPMnist(dim_in=len_in, dim_hidden=128, dim_out=args.num_classes).cuda()
-            #     else:
-            #         net_glob = MLPMnist(dim_in=len_in, dim_hidden=128, dim_out=args.num_classes)
-            #         #torch.save(net_glob.state_dict(), './net_glob/mlp_FashionMNIST_glob.pth')
+
             elif args.model == 'cnn' and args.dataset == 'FashionMNIST':
                 if args.gpu != -1:
                     torch.cuda.set_device(args.gpu)
@@ -195,14 +169,7 @@ def main(args):
                 else:
                     net_glob = CNNFashionMnist(args=args)
                     #torch.save(net_glob.state_dict(), './net_glob/cnn_FashionMNIST_glob.pth')
-            # elif args.model == 'mlp' and args.dataset == 'Adult':
-            #     if args.gpu != -1:
-            #         torch.cuda.set_device(args.gpu)
-            #         # net_glob = CNNMnist(args=args).cuda()
-            #         net_glob = MLPAdult(args=args).cuda()
-            #     else:
-            #         net_glob = MLPAdult(args=args)
-            #         #torch.save(net_glob.state_dict(), './net_glob/cnn_FashionMNIST_glob.pth')
+
             else:
                 exit('Error: unrecognized model')
             #print("Nerual Net:",net_glob)
@@ -314,8 +281,8 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='FL with model quantilization')
     parser.add_argument('--gpu', type=int, default=-1)
-    parser.add_argument('--dataset', default='mnist', help='mnist or FashionMNIST or cifar or Adult')
-    parser.add_argument('--num_classes', default=10)
+    parser.add_argument('--dataset', default='adult', help='mnist or FashionMNIST or cifar or Adult')
+    parser.add_argument('--num_classes', default=2)
     parser.add_argument('--iid', default=True)
     parser.add_argument('--strict_iid', default=True)     
     parser.add_argument('--model', default='mlp', help='mlp or cnn')

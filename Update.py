@@ -29,20 +29,14 @@ class LocalUpdate(object):
         self.args = args
         self.loss_func = nn.CrossEntropyLoss()
         # self.loss_func = nn.NLLLoss()
-        self.ldr_train, self.ldr_test = self.train_val_test(dataset, list(idxs))          
+        self.ldr = self.train_val_test(dataset, list(idxs))          
 
     def train_val_test(self, dataset, idxs):
         # split train, and test
-        idxs_train = idxs
-        if (self.args.dataset == 'mnist') or (self.args.dataset == 'cifar') or (self.args.dataset == 'FashionMNIST') or (self.args.dataset == 'Adult'):
-            idxs_test = idxs
-            train = DataLoader(DatasetSplit(dataset, idxs_train), batch_size=self.args.local_bs, shuffle=True)
-            #val = DataLoader(DatasetSplit(dataset, idxs_val), batch_size=int(len(idxs_val)/10), shuffle=True)
-            test = DataLoader(DatasetSplit(dataset, idxs_test), batch_size=int(len(idxs_test)), shuffle=False)
-        else:
-            train = self.args.dataset_train[idxs]
-            test = self.args.dataset_test[idxs]
-        return train, test
+        data = DataLoader(DatasetSplit(dataset, idxs), batch_size=self.args.local_bs, shuffle=True)
+        #val = DataLoader(DatasetSplit(dataset, idxs_val), batch_size=int(len(idxs_val)/10), shuffle=True)
+        # test = DataLoader(DatasetSplit(dataset, idxs_test), batch_size=int(len(idxs_test)), shuffle=False)
+        return data
 
     def update_weights(self, net):
         net.train()
@@ -55,7 +49,7 @@ class LocalUpdate(object):
         epoch_acc = []
         for iter in range(self.args.local_ep):
             batch_loss = []
-            for batch_idx, (images, labels) in enumerate(self.ldr_train):
+            for batch_idx, (images, labels) in enumerate(self.ldr):
                 if self.args.gpu != -1:
                     images, labels = images.cuda(), labels.cuda()          
                     images, labels = autograd.Variable(images),\
@@ -89,7 +83,7 @@ class LocalUpdate(object):
         loss = 0
         log_probs = []
         labels = []
-        for batch_idx, (images, labels) in enumerate(self.ldr_test):
+        for batch_idx, (images, labels) in enumerate(self.ldr):
             if self.args.gpu != -1:
                 images, labels = images.cuda(), labels.cuda()
             images, labels = autograd.Variable(images), autograd.Variable(labels)
