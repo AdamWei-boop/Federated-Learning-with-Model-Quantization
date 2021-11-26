@@ -294,8 +294,8 @@ if __name__ == '__main__':
     
     parser.add_argument('--set_quant_level', type=list, default=[64])
     parser.add_argument('--set_quant_sche', type=list, \
-                       default=['bucket_quantile', 'uniform_quantization', 'SVD_Split',\
-                                'count_sketch', 'QSGD', 'kmeans'])
+                       default=['bucket_quantile', 'uniform_quantization',\
+                                'count_sketch', 'QSGD'])
     parser.add_argument('--set_degree_noniid', type=list, default=[0])    
     parser.add_argument('--num_experiments', type=int, default=1)
     args = parser.parse_args() 
