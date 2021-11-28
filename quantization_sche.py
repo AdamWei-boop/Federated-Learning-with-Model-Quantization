@@ -140,6 +140,7 @@ class quant_process(object):
         self.sketch_sche = sketch_sche
         self.quant_level = quant_level
         self.w_update = w_update
+        self.table_size = [quant_level, 200, 1]
     
         self.values_update = []                          
         for i in w_update.keys():
@@ -186,10 +187,10 @@ class quant_process(object):
         elif self.sketch_sche == 'count_sketch':
 
             grad = torch.from_numpy(np.array(self.values_update))
-            table_size = [128, 200, 1]
+            # self.table_size = [128, 200, 1]
             #g =sketch_new(w_increas,orig_values_increment,num_rows,num_cols, compute_grad=True)
             # grad_size =  len(self.values_update)
-            hash_table, grad_unsketched, grad = count_sketch(grad, table_size)
+            hash_table, grad_unsketched, grad = count_sketch(grad, self.table_size)
             quant_values = grad_unsketched.numpy()
             quant_w = quant_recover_values(self.w_update, quant_values)
             
