@@ -15,7 +15,7 @@ from update import LocalUpdate
 from fednets import MlPModel, CNNMnist, CNN_test, CNNCifar, CNNFashionMnist
 from averaging import average_weights
 from calculate import subtract, add
-from quantilization_sche import quant_process
+from quantization_sche import quant_process
 from sklearn.model_selection import train_test_split
     
 def main(args): 
@@ -101,13 +101,14 @@ def main(args):
     final_train_acc = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
     final_test_loss = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
     final_test_acc = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
-    
+    final_communication_cost = np.zeros([len(args.set_degree_noniid), len(args.set_quant_level), len(args.set_quant_sche)])
+       
     num_combination = len(args.set_degree_noniid)*len(args.set_quant_level)*len(args.set_quant_sche)
     for s in range(num_combination):
         
         index0 = int(s / (len(args.set_quant_level) * len(args.set_quant_sche)))
-        index1 = int((s-index0) / len(args.set_quant_sche))
-        index2 = s-index0-index1
+        index1 = int((s-index0*len(args.set_quant_level) * len(args.set_quant_sche)) / len(args.set_quant_sche))
+        index2 = int(s-index0*len(args.set_quant_level) * len(args.set_quant_sche)-index1*len(args.set_quant_sche))
         args.degree_noniid = args.set_degree_noniid[index0]
         args.quant_sche = args.set_quant_sche[index2] 
         args.quant_level = args.set_quant_level[index1]                
@@ -194,7 +195,8 @@ def main(args):
             # print("\n Total Training size:", 784 * 8 / 8 * 60000, " bytes")
             
             # training
-            ###  FedAvg Aglorithm  ###                                     
+            ###  FedAvg Aglorithm  ###
+            communication_cost_list = []                                 
             for iter in range(args.epochs):
                 print('\n','*' * 20,f'Experiment: {m}/{args.num_experiments}, Epoch: {iter}/{args.epochs}','*' * 20)
                 time_start = time.time() 
@@ -207,6 +209,7 @@ def main(args):
                 
                 train_loss_locals_list, train_acc_locals_list = [], []
                 mse_errors = [] 
+                communication_cost_sum = 0
                 w_update_locals = []
                 for idx in range(len(chosenUsers)):
                     local = LocalUpdate(args=args, 
@@ -216,18 +219,18 @@ def main(args):
                     w, loss, acc = local.update_weights(net=copy.deepcopy(net_glob))
                     
                     w_update_local = subtract(w, w_glob)
-                    local_quant = quant_process(args.quant_sche, w_update_local, args.quant_level)
-                    w_update_local, mse_error = local_quant.quant()
+                    local_quant = quant_process(args.quant_sche, w_update_local, args.quant_level, args.base_bits)
+                    w_update_local, communication_cost, mse_error = local_quant.quant()
                     
                     train_loss_locals_list.append(loss)
                     train_acc_locals_list.append(acc)                                
                     w_update_locals.append(w_update_local)
                     mse_errors.append(mse_error)
+                    communication_cost_sum += communication_cost
                     
                 print('MSE errors:', mse_errors)
-                        
-                w_glob_update = average_weights(w_update_locals)                                    
-                
+                communication_cost_list.append(communication_cost_sum)
+                w_glob_update = average_weights(w_update_locals)
                 w_glob = add(w_glob, w_glob_update)
 
                 # copy weight to net_glob
@@ -255,7 +258,8 @@ def main(args):
                 print('\nRunning time = {:.2f}s'.format(time_end-time_start))
                 
                 print("\nTrain loss: {}, Train acc: {}".format(train_loss_avg, train_acc_avg))
-                print("\nTest  loss: {}, Test acc:  {}".format(test_loss_avg, test_acc_avg))
+                print("\nTest loss: {}, Test acc:  {}".format(test_loss_avg, test_acc_avg))
+                print("\nCommunication cost: {}".format(communication_cost_list))
                 
             loss_train.append(train_loss_avg)
             acc_train.append(train_acc_avg)
@@ -266,19 +270,21 @@ def main(args):
         final_train_acc[index0][index1][index2] = sum(loss_train) / len(loss_train)
         final_test_loss[index0][index1][index2] = sum(loss_test) / len(loss_test)
         final_test_acc[index0][index1][index2] = sum(acc_test) / len(acc_test)
+        final_communication_cost[index0][index1][index2] = communication_cost_list[-1]
         
         print('\nFinal train loss:', final_train_loss)
         print('\nFinal train acc:', final_train_acc)
         print('\nFinal test loss:', final_test_loss)
         print('\nFinal test acc:', final_test_acc)
+        print('\nFinal communication cost:', final_communication_cost)
 
 
 if __name__ == '__main__': 
     
     parser = argparse.ArgumentParser(description='FL with model quantilization')
     parser.add_argument('--gpu', type=int, default=-1)
-    parser.add_argument('--dataset', default='adult', help='mnist or FashionMNIST or cifar or Adult')
-    parser.add_argument('--num_classes', default=2)
+    parser.add_argument('--dataset', default='mnist', help='mnist or FashionMNIST or cifar or Adult')
+    parser.add_argument('--num_classes', default=10)
     parser.add_argument('--iid', default=True)
     parser.add_argument('--strict_iid', default=True)     
     parser.add_argument('--model', default='mlp', help='mlp or cnn')
@@ -292,11 +298,12 @@ if __name__ == '__main__':
     parser.add_argument('--num_items_test', type=int, default=128)    
     parser.add_argument('--local_bs', type=int, default=128)
     
-    parser.add_argument('--set_quant_level', type=list, default=[64])
+    parser.add_argument('--base_bits', type=int, default=32)
+    parser.add_argument('--set_quant_level', type=list, default=[64, 128])
     parser.add_argument('--set_quant_sche', type=list, \
-                       default=['bucket_quantile', 'uniform_quantization',\
+                       default=['orig', 'bucket_quantile', 'bucket_uniform',\
                                 'count_sketch', 'QSGD'])
-    parser.add_argument('--set_degree_noniid', type=list, default=[0])    
+    parser.add_argument('--set_degree_noniid', type=list, default=[0, 0.1])    
     parser.add_argument('--num_experiments', type=int, default=1)
     args = parser.parse_args() 
  

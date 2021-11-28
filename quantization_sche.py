@@ -17,7 +17,7 @@ from csvec import CSVec
 from calculate import get_2_norm
 
 
-def kmeans_opt(quantile_level,orig_values_increment):
+def kmeans_opt(quantile_level, orig_values_increment):
     quantile_buck = np.zeros(quantile_level+1)
     quantile_buck[-1] = max(orig_values_increment)+(1e-5)
     quantile_buck[0] = min(orig_values_increment)-(1e-5)
@@ -32,7 +32,7 @@ def kmeans_opt(quantile_level,orig_values_increment):
     quantile_index = pd.cut(orig_values_increment, quantile_buck, right=True, labels=range(len(quantile_buck)-1))
     values_increment = [quantile_value[i] for i in quantile_index]
     
-    return quantile_buck,quantile_index,values_increment
+    return quantile_buck, quantile_index, values_increment
 
 
 def QSGD(quantile_level,orig_values_increment):
@@ -46,7 +46,6 @@ def QSGD(quantile_level,orig_values_increment):
     dec_value = [quantile_index_l[i]+1-0.5*quantile_level*abs(orig_values_increment[i])/norm for i in range(len(orig_values_increment))]
     random_value = np.random.rand(len(orig_values_increment))
     
-    
     values_increment = copy.deepcopy(orig_values_increment)    
     for i in range(len(orig_values_increment)):
         if random_value[i] < dec_value[i]:
@@ -54,7 +53,7 @@ def QSGD(quantile_level,orig_values_increment):
         else:
             values_increment[i] = quantile_buck[quantile_index[i]+1]
     
-    return quantile_buck,quantile_index,values_increment
+    return quantile_buck, quantile_index, values_increment
 
 def SVD_Split(quantile_level,orig_values_increment):
     #-------input arr handle  -----------------------
@@ -135,11 +134,12 @@ def quant_recover_values(w, quant_values):
     return quant_update
 
 class quant_process(object):
-    def __init__(self, sketch_sche, w_update, quant_level):
+    def __init__(self, sketch_sche, w_update, quant_level, base_bits):
         
         self.sketch_sche = sketch_sche
         self.quant_level = quant_level
         self.w_update = w_update
+        self.base_bits = base_bits
         self.table_size = [quant_level, 200, 1]
     
         self.values_update = []                          
@@ -147,13 +147,8 @@ class quant_process(object):
             self.values_update += list(w_update[i].view(-1).cpu().numpy())
     
     def quant(self):
-        
-        if self.sketch_sche == 'orig':
             
-            quant_w = self.w_update
-            mse_error = 0
-            
-        elif self.sketch_sche == 'bucket_quantile':
+        if self.sketch_sche == 'bucket_quantile':
             
             q = [i/self.quant_level for i in range(self.quant_level)]
             quantile_bucket = np.quantile(self.values_update, q, axis = None)
@@ -163,8 +158,10 @@ class quant_process(object):
             quantile_bucket = [min_value] + quantile_bucket + [max_value]
  
             quant_w = quant_recover_boundary(self.w_update, quantile_bucket)
+            
+            communication_cost = self.base_bits * self.quant_level + np.ceil(np.log2(len(self.values_update)))
         
-        elif self.sketch_sche == 'uniform_quantization':
+        elif self.sketch_sche == 'bucket_uniform':
             
             min_value, max_value = min(self.values_update)-(1e-5), max(self.values_update)+(1e-5)
             _, uniform_bucket = np.histogram(self.values_update,
@@ -173,32 +170,48 @@ class quant_process(object):
                                                 weights=None,
                                                 density=False)
             quant_w = quant_recover_boundary(self.w_update, uniform_bucket)
+            
+            communication_cost = self.base_bits * self.quant_level + np.ceil(np.log2(len(self.values_update)))
         
         elif self.sketch_sche == 'kmeans':
         
             _, _, quant_values = kmeans_opt(self.quant_level, self.values_update)
             quant_w = quant_recover_values(self.w_update, quant_values)
+            
+            communication_cost = self.base_bits * self.quant_level + np.ceil(np.log2(len(self.values_update)))
 
         elif self.sketch_sche == 'QSGD':
 
             _, _, quant_values = QSGD(self.quant_level, self.values_update)
             quant_w = quant_recover_values(self.w_update, quant_values)
             
+            communication_cost = self.base_bits * self.quant_level + np.ceil(np.log2(len(self.values_update)))
+            
         elif self.sketch_sche == 'count_sketch':
 
             grad = torch.from_numpy(np.array(self.values_update))
-            # self.table_size = [128, 200, 1]
             #g =sketch_new(w_increas,orig_values_increment,num_rows,num_cols, compute_grad=True)
             # grad_size =  len(self.values_update)
             hash_table, grad_unsketched, grad = count_sketch(grad, self.table_size)
             quant_values = grad_unsketched.numpy()
             quant_w = quant_recover_values(self.w_update, quant_values)
+
+            communication_cost = self.base_bits * self.table_size[0] * self.table_size[1]\
+                + np.ceil(np.log2(self.table_size[0] * self.table_size[1]))
             
         elif self.sketch_sche == 'SVD_Split':
             
             quant_values = SVD_Split(self.quant_level, self.values_update)
             quant_w = quant_recover_values(self.w_update, quant_values)
             
+            communication_cost = self.base_bits * len(quant_values)
+            
+        else:
+            
+            print('\nNotice: no quantization')
+            quant_w = self.w_update
+            communication_cost = self.base_bits * len(self.values_update)
+            
         mse_error = get_2_norm(quant_w, self.w_update)
         
-        return quant_w, mse_error
+        return quant_w, communication_cost, mse_error
